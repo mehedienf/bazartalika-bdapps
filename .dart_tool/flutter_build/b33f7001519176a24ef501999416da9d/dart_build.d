@@ -1,0 +1,1 @@
+ /Volumes/Volume1/Project/Bazar-Talika/bazartalika-bdapps/.dart_tool/flutter_build/b33f7001519176a24ef501999416da9d/dart_build_result.json:  /Volumes/Volume1/Project/Bazar-Talika/bazartalika-bdapps/.dart_tool/package_config.json /Volumes/Volume1/Project/Bazar-Talika/bazartalika-bdapps/pubspec.yaml /Volumes/Volume2/Extend/flutter/bin/cache/dart-sdk/version
