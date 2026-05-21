@@ -21,8 +21,8 @@
     },
     "linking_enabled": false
   },
-  "out_dir_shared": "/Volumes/Volume1/Project/Bazar-Talika/bazartalika-bdapps/.dart_tool/hooks_runner/shared/win32/build/",
-  "out_file": "/Volumes/Volume1/Project/Bazar-Talika/bazartalika-bdapps/.dart_tool/hooks_runner/win32/b9ca2ea0dd/output.json",
+  "out_dir_shared": "/Volumes/Volume1/Project/Bazar-Talika/bazartalika_bdapps/.dart_tool/hooks_runner/shared/win32/build/",
+  "out_file": "/Volumes/Volume1/Project/Bazar-Talika/bazartalika_bdapps/.dart_tool/hooks_runner/win32/b9ca2ea0dd/output.json",
   "package_name": "win32",
   "package_root": "/Users/mehedienam/.pub-cache/hosted/pub.dev/win32-6.2.0/",
   "user_defines": {}
