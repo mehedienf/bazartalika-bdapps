@@ -51,9 +51,9 @@
     },
     {
       "name": "code_assets",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/code_assets-1.0.0",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/code_assets-1.2.1",
       "packageUri": "lib/",
-      "languageVersion": "3.9"
+      "languageVersion": "3.10"
     },
     {
       "name": "collection",
@@ -63,9 +63,9 @@
     },
     {
       "name": "cross_file",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/cross_file-0.3.5+2",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/cross_file-0.3.5+4",
       "packageUri": "lib/",
-      "languageVersion": "3.8"
+      "languageVersion": "3.10"
     },
     {
       "name": "crypto",
@@ -107,7 +107,7 @@
       "name": "flutter",
       "rootUri": "file:///Volumes/Volume2/Extend/flutter/packages/flutter",
       "packageUri": "lib/",
-      "languageVersion": "3.9"
+      "languageVersion": "3.10"
     },
     {
       "name": "flutter_launcher_icons",
@@ -125,25 +125,19 @@
       "name": "flutter_test",
       "rootUri": "file:///Volumes/Volume2/Extend/flutter/packages/flutter_test",
       "packageUri": "lib/",
-      "languageVersion": "3.9"
+      "languageVersion": "3.10"
     },
     {
       "name": "flutter_web_plugins",
       "rootUri": "file:///Volumes/Volume2/Extend/flutter/packages/flutter_web_plugins",
       "packageUri": "lib/",
-      "languageVersion": "3.9"
-    },
-    {
-      "name": "glob",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/glob-2.1.3",
-      "packageUri": "lib/",
-      "languageVersion": "3.3"
+      "languageVersion": "3.10"
     },
     {
       "name": "google_fonts",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/google_fonts-8.1.0",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/google_fonts-8.2.0",
       "packageUri": "lib/",
-      "languageVersion": "3.9"
+      "languageVersion": "3.10"
     },
     {
       "name": "google_mobile_ads",
@@ -153,7 +147,7 @@
     },
     {
       "name": "hooks",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/hooks-1.0.3",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/hooks-2.0.2",
       "packageUri": "lib/",
       "languageVersion": "3.10"
     },
@@ -171,7 +165,7 @@
     },
     {
       "name": "image",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/image-4.8.0",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/image-4.9.1",
       "packageUri": "lib/",
       "languageVersion": "3.0"
     },
@@ -237,7 +231,7 @@
     },
     {
       "name": "meta",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/meta-1.17.0",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/meta-1.18.0",
       "packageUri": "lib/",
       "languageVersion": "3.5"
     },
@@ -248,14 +242,8 @@
       "languageVersion": "3.2"
     },
     {
-      "name": "native_toolchain_c",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/native_toolchain_c-0.17.6",
-      "packageUri": "lib/",
-      "languageVersion": "3.10"
-    },
-    {
       "name": "objective_c",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/objective_c-9.3.0",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/objective_c-9.4.1",
       "packageUri": "lib/",
       "languageVersion": "3.10"
     },
@@ -273,9 +261,9 @@
     },
     {
       "name": "path_provider",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/path_provider-2.1.5",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/path_provider-2.1.6",
       "packageUri": "lib/",
-      "languageVersion": "3.4"
+      "languageVersion": "3.10"
     },
     {
       "name": "path_provider_android",
@@ -291,15 +279,15 @@
     },
     {
       "name": "path_provider_linux",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/path_provider_linux-2.2.1",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/path_provider_linux-2.2.2",
       "packageUri": "lib/",
-      "languageVersion": "2.19"
+      "languageVersion": "3.10"
     },
     {
       "name": "path_provider_platform_interface",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/path_provider_platform_interface-2.1.2",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/path_provider_platform_interface-2.1.3",
       "packageUri": "lib/",
-      "languageVersion": "3.0"
+      "languageVersion": "3.10"
     },
     {
       "name": "path_provider_windows",
@@ -345,7 +333,7 @@
     },
     {
       "name": "share_plus",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/share_plus-13.1.0",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/share_plus-13.2.1",
       "packageUri": "lib/",
       "languageVersion": "3.10"
     },
@@ -363,9 +351,9 @@
     },
     {
       "name": "shared_preferences_android",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/shared_preferences_android-2.4.23",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/shared_preferences_android-2.4.27",
       "packageUri": "lib/",
-      "languageVersion": "3.9"
+      "languageVersion": "3.12"
     },
     {
       "name": "shared_preferences_foundation",
@@ -401,7 +389,7 @@
       "name": "sky_engine",
       "rootUri": "file:///Volumes/Volume2/Extend/flutter/bin/cache/pkg/sky_engine",
       "packageUri": "lib/",
-      "languageVersion": "3.9"
+      "languageVersion": "3.10"
     },
     {
       "name": "source_span",
@@ -411,33 +399,33 @@
     },
     {
       "name": "sqflite",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/sqflite-2.4.2+1",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/sqflite-2.4.3",
       "packageUri": "lib/",
-      "languageVersion": "3.10"
+      "languageVersion": "3.12"
     },
     {
       "name": "sqflite_android",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/sqflite_android-2.4.2+3",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/sqflite_android-2.4.3",
       "packageUri": "lib/",
-      "languageVersion": "3.10"
+      "languageVersion": "3.12"
     },
     {
       "name": "sqflite_common",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/sqflite_common-2.5.7",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/sqflite_common-2.5.11",
       "packageUri": "lib/",
-      "languageVersion": "3.10"
+      "languageVersion": "3.12"
     },
     {
       "name": "sqflite_darwin",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/sqflite_darwin-2.4.2",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/sqflite_darwin-2.4.3+1",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.12"
     },
     {
       "name": "sqflite_platform_interface",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/sqflite_platform_interface-2.4.0",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/sqflite_platform_interface-2.4.1",
       "packageUri": "lib/",
-      "languageVersion": "3.5"
+      "languageVersion": "3.12"
     },
     {
       "name": "stack_trace",
@@ -459,9 +447,9 @@
     },
     {
       "name": "synchronized",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/synchronized-3.4.0+1",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/synchronized-3.4.1",
       "packageUri": "lib/",
-      "languageVersion": "3.11"
+      "languageVersion": "3.12"
     },
     {
       "name": "term_glyph",
@@ -471,7 +459,7 @@
     },
     {
       "name": "test_api",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/test_api-0.7.10",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/test_api-0.7.11",
       "packageUri": "lib/",
       "languageVersion": "3.7"
     },
@@ -507,7 +495,7 @@
     },
     {
       "name": "uuid",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/uuid-4.5.3",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/uuid-4.6.0",
       "packageUri": "lib/",
       "languageVersion": "3.0"
     },
@@ -531,15 +519,15 @@
     },
     {
       "name": "webview_flutter",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/webview_flutter-4.13.1",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/webview_flutter-4.14.1",
       "packageUri": "lib/",
-      "languageVersion": "3.8"
+      "languageVersion": "3.10"
     },
     {
       "name": "webview_flutter_android",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/webview_flutter_android-4.12.0",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/webview_flutter_android-4.13.0",
       "packageUri": "lib/",
-      "languageVersion": "3.9"
+      "languageVersion": "3.12"
     },
     {
       "name": "webview_flutter_platform_interface",
@@ -549,13 +537,13 @@
     },
     {
       "name": "webview_flutter_wkwebview",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/webview_flutter_wkwebview-3.25.1",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/webview_flutter_wkwebview-3.26.0",
       "packageUri": "lib/",
-      "languageVersion": "3.10"
+      "languageVersion": "3.12"
     },
     {
       "name": "win32",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/win32-6.2.0",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/win32-6.3.0",
       "packageUri": "lib/",
       "languageVersion": "3.10"
     },
@@ -567,9 +555,9 @@
     },
     {
       "name": "xml",
-      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/xml-6.6.1",
+      "rootUri": "file:///Users/mehedienam/.pub-cache/hosted/pub.dev/xml-7.0.1",
       "packageUri": "lib/",
-      "languageVersion": "3.8"
+      "languageVersion": "3.11"
     },
     {
       "name": "yaml",
@@ -578,15 +566,15 @@
       "languageVersion": "3.4"
     },
     {
-      "name": "bazartalika",
+      "name": "smartlist",
       "rootUri": "../",
       "packageUri": "lib/",
       "languageVersion": "3.11"
     }
   ],
   "generator": "pub",
-  "generatorVersion": "3.11.1",
+  "generatorVersion": "3.12.1",
   "flutterRoot": "file:///Volumes/Volume2/Extend/flutter",
-  "flutterVersion": "3.41.4",
+  "flutterVersion": "3.44.1",
   "pubCache": "file:///Users/mehedienam/.pub-cache"
 }

@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'screens/bdapps_login.dart';
-import 'screens/home_screen.dart';
+import './screens/home_screen.dart';
+import './screens/login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  MobileAds.instance.initialize();
+  // MobileAds.instance.initialize();
   final prefs = await SharedPreferences.getInstance();
   final isDarkMode = prefs.getBool('bazar_is_dark_mode') ?? false;
   final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
@@ -19,11 +18,7 @@ class BazarTalikaApp extends StatefulWidget {
   final bool initialDarkMode;
   final bool isLoggedIn;
 
-  const BazarTalikaApp({
-    super.key,
-    required this.initialDarkMode,
-    required this.isLoggedIn,
-  });
+  const BazarTalikaApp({super.key, required this.initialDarkMode, required this.isLoggedIn});
 
   @override
   State<BazarTalikaApp> createState() => _BazarTalikaAppState();
@@ -62,8 +57,8 @@ class _BazarTalikaAppState extends State<BazarTalikaApp> {
       themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
       initialRoute: widget.isLoggedIn ? '/home' : '/login',
       routes: {
-        '/login': (context) => const LoginPage(),
-        '/home': (context) => HomeScreen(
+        '/login': (_) => const LoginPage(),
+        '/home': (_) => HomeScreen(
           onDarkModeToggle: (val) {
             setState(() {
               _isDarkMode = val;

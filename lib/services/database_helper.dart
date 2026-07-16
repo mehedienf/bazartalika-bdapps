@@ -4,6 +4,7 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../models/bazar_item.dart';
+import '../models/bazar_list.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -23,7 +24,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -38,23 +39,140 @@ class DatabaseHelper {
             'ALTER TABLE items ADD COLUMN isArchived INTEGER NOT NULL DEFAULT 0',
           );
         }
+        if (oldVersion < 4) {
+          await db.execute('''
+          CREATE TABLE lists (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            isArchived INTEGER NOT NULL DEFAULT 0,
+            createdAt TEXT NOT NULL
+          )
+          ''');
+
+          await db.execute('ALTER TABLE items ADD COLUMN listId INTEGER');
+
+          // Create a default list
+          final defaultListId = await db.insert('lists', {
+            'name': 'আমার তালিকা',
+            'isArchived': 0,
+            'createdAt': DateTime.now().toIso8601String(),
+          });
+
+          // Assign existing items to the default list (unarchived)
+          await db.execute('UPDATE items SET listId = ? WHERE isArchived = 0', [
+            defaultListId,
+          ]);
+
+          // Create an archived list for old archived items
+          final archivedListId = await db.insert('lists', {
+            'name': 'পুরোনো আর্কাইভ',
+            'isArchived': 1,
+            'createdAt': DateTime.now().toIso8601String(),
+          });
+
+          await db.execute('UPDATE items SET listId = ? WHERE isArchived = 1', [
+            archivedListId,
+          ]);
+        }
       },
     );
   }
 
   Future _createDB(Database db, int version) async {
     await db.execute('''
+CREATE TABLE lists (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  isArchived INTEGER NOT NULL DEFAULT 0,
+  createdAt TEXT NOT NULL
+)
+''');
+
+    await db.execute('''
 CREATE TABLE items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  listId INTEGER,
   name TEXT NOT NULL,
   price REAL,
   category TEXT,
   isBought INTEGER NOT NULL,
   isArchived INTEGER NOT NULL DEFAULT 0,
   createdAt TEXT NOT NULL,
-  originalCreatedAt TEXT
+  originalCreatedAt TEXT,
+  FOREIGN KEY (listId) REFERENCES lists (id) ON DELETE CASCADE
 )
 ''');
+
+    // Create a default list
+    await db.insert('lists', {
+      'name': 'আমার তালিকা',
+      'isArchived': 0,
+      'createdAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  // List Operations
+  Future<int> insertList(BazarList list) async {
+    final db = await instance.database;
+    return await db.insert('lists', list.toJson());
+  }
+
+  Future<List<BazarList>> getAllLists({bool includeArchived = false}) async {
+    final db = await instance.database;
+    final where = includeArchived ? null : 'isArchived = 0';
+    final maps = await db.query(
+      'lists',
+      where: where,
+      orderBy: 'createdAt DESC',
+    );
+    return maps.map((map) => BazarList.fromJson(map)).toList();
+  }
+
+  Future<BazarList?> getList(int id) async {
+    final db = await instance.database;
+    final maps = await db.query('lists', where: 'id = ?', whereArgs: [id]);
+    if (maps.isNotEmpty) {
+      return BazarList.fromJson(maps.first);
+    }
+    return null;
+  }
+
+  Future<int> updateList(BazarList list) async {
+    final db = await instance.database;
+    return db.update(
+      'lists',
+      list.toJson(),
+      where: 'id = ?',
+      whereArgs: [list.id],
+    );
+  }
+
+  Future<int> deleteList(int id) async {
+    final db = await instance.database;
+    // Delete items in the list too since we don't have CASCADE enabled if foreign keys are off by default
+    await db.delete('items', where: 'listId = ?', whereArgs: [id]);
+    return await db.delete('lists', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> archiveList(int id) async {
+    final db = await instance.database;
+    await db.update(
+      'lists',
+      {'isArchived': 1},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    return await db.update(
+      'items',
+      {'isArchived': 1},
+      where: 'listId = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> assignNullListId(int listId) async {
+    final db = await instance.database;
+    return db.update('items', {'listId': listId}, where: 'listId IS NULL');
   }
 
   Future<int> insertItem(BazarItem item) async {
@@ -66,9 +184,16 @@ CREATE TABLE items (
     return await db.insert('items', map);
   }
 
-  Future<List<BazarItem>> getAllItems() async {
+  Future<List<BazarItem>> getAllItems({int? listId}) async {
     final db = await instance.database;
-    final maps = await db.query('items', orderBy: 'createdAt ASC');
+    final where = listId != null ? 'listId = ?' : null;
+    final whereArgs = listId != null ? [listId] : null;
+    final maps = await db.query(
+      'items',
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: 'createdAt ASC',
+    );
 
     return maps.map((map) {
       final mutableMap = Map<String, dynamic>.from(map);

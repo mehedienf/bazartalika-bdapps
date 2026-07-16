@@ -2,6 +2,7 @@ import 'category.dart';
 
 class BazarItem {
   int? id;
+  int? listId;
   final String name;
   double? price;
   Category? category;
@@ -12,6 +13,7 @@ class BazarItem {
 
   BazarItem({
     this.id,
+    this.listId,
     required this.name,
     this.price,
     this.category,
@@ -24,6 +26,7 @@ class BazarItem {
 
   Map<String, dynamic> toJson() => {
     'id': id,
+    'listId': listId,
     'name': name,
     'price': price,
     'category': category?.toJson(),
@@ -36,6 +39,7 @@ class BazarItem {
   factory BazarItem.fromJson(Map<String, dynamic> json) {
     return BazarItem(
       id: json['id'],
+      listId: json['listId'],
       name: json['name'],
       price: json['price'] != null ? (json['price'] as num).toDouble() : null,
       category: json['category'] != null

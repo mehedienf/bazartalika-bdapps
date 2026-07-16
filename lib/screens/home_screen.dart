@@ -1,16 +1,21 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:async';
+// import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:http/http.dart' as http;
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:smartlist/screens/login_screen.dart';
 
 import '../models/bazar_item.dart';
+import '../models/bazar_list.dart';
 import '../models/category.dart';
 import '../services/database_helper.dart';
 import '../widgets/bazar_item_tile.dart';
 import 'archive_screen.dart';
+
+const String _baseUrl = "https://bdapps.flicksize.com/krishix/api/";
 
 enum SortOption { manual, dateAsc, dateDesc, alphaAsc, alphaDesc }
 
@@ -32,27 +37,37 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _quickAddNameController = TextEditingController();
   final TextEditingController _quickAddPriceController =
       TextEditingController();
+  final TextEditingController _newListController = TextEditingController();
   final FocusNode _quickAddFocusNode = FocusNode();
   Category? _quickAddCategory;
 
-  final List<Category> _categories = [
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+
+  final List<Category> _defaultSeedCategories = [
     Category('সবজি (Vegetables)'),
     Category('মাছ (Fish)'),
     Category('মাংস (Meat)'),
     Category('মসলা (Spices)'),
     Category('অন্যান্য (Others)'),
   ];
+  final List<Category> _categories = [];
   final List<BazarItem> _items = [];
   Category? _selectedFilterCategory;
   SortOption _currentSortOption = SortOption.manual;
 
-  BannerAd? _bannerAd;
-  bool _isAdLoaded = false;
-  bool _isAdLoading = false;
+  final List<BazarList> _lists = [];
+  BazarList? _selectedList;
+  int? _selectedListId;
 
-  final String _adUnitId = Platform.isAndroid
-      ? 'ca-app-pub-3867432578176290/3476561839' // Real Ad Unit ID (Production)
-      : 'ca-app-pub-3867432578176290/3476561839'; // Real Ad Unit ID (Production)
+  // BannerAd? _bannerAd;
+  // bool _isAdLoaded = false;
+  // bool _isAdLoading = false;
+
+  // final String _adUnitId = Platform.isAndroid
+  //     ? 'ca-app-pub-3867432578176290/3476561839' // Real Ad Unit ID (Production)
+  //     : 'ca-app-pub-3867432578176290/3476561839'; // Real Ad Unit ID (Production)
   // ? 'ca-app-pub-3940256099942544/6300978111' // Test Ad Unit ID (Android)
   // : 'ca-app-pub-3940256099942544/2934735716'; // Test Ad Unit ID (iOS)
 
@@ -60,33 +75,32 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadPreferences();
-    _loadItems();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_isAdLoaded && !_isAdLoading) {
-        _loadAd();
-      }
-    });
+    // WidgetsBinding.instance.addPostFrameCallback((_) {
+    //   // if (!_isAdLoaded && !_isAdLoading) {
+    //   //   // _loadAd();
+    //   // }
+    // });
   }
 
   Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // Load saved custom categories
-    final List<String>? savedCategories = prefs.getStringList(
-      'bazar_categories',
-    );
-    if (savedCategories != null) {
-      for (var catName in savedCategories) {
-        if (!_categories.any((c) => c.name == catName)) {
-          _categories.add(Category(catName));
-        }
-      }
-    }
-
-    // Load filter category
     final savedFilterCategory = prefs.getString('selected_filter_category');
     final savedSortOption = prefs.getInt('current_sort_option');
+    final savedListId = prefs.getInt('selected_list_id');
 
+    setState(() {
+      if (savedSortOption != null &&
+          savedSortOption >= 0 &&
+          savedSortOption < SortOption.values.length) {
+        _currentSortOption = SortOption.values[savedSortOption];
+      }
+    });
+
+    _selectedListId = savedListId;
+    await _loadLists();
+
+    // After loading lists, try setting the saved filter category if it exists in the new _categories
     setState(() {
       if (savedFilterCategory != null && savedFilterCategory.isNotEmpty) {
         try {
@@ -96,12 +110,6 @@ class _HomeScreenState extends State<HomeScreen> {
         } catch (_) {
           _selectedFilterCategory = null;
         }
-      }
-
-      if (savedSortOption != null &&
-          savedSortOption >= 0 &&
-          savedSortOption < SortOption.values.length) {
-        _currentSortOption = SortOption.values[savedSortOption];
       }
     });
   }
@@ -120,12 +128,105 @@ class _HomeScreenState extends State<HomeScreen> {
     await prefs.setInt('current_sort_option', option.index);
   }
 
+  Future<void> _showSortDialog() async {
+    final result = await showDialog<SortOption>(
+      context: context,
+      builder: (ctx) {
+        Widget buildOption(String label, SortOption option) {
+          final isSelected = _currentSortOption == option;
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2.0),
+            child: ListTile(
+              dense: true,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              selected: isSelected,
+              selectedColor: Theme.of(context).primaryColor,
+              selectedTileColor: Theme.of(
+                context,
+              ).primaryColor.withValues(alpha: 0.15),
+              title: Text(
+                label,
+                style: TextStyle(
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+              onTap: () => Navigator.pop(ctx, option),
+            ),
+          );
+        }
+
+        return AlertDialog(
+          title: const Text('সজানো (Sort)'),
+          contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              buildOption('নিজের মতো (Manual)', SortOption.manual),
+              buildOption('আগে যোগ করা (Date Asc)', SortOption.dateAsc),
+              buildOption('নতুন যোগ করা (Date Desc)', SortOption.dateDesc),
+              buildOption('নাম অনুযায়ী (A - Z)', SortOption.alphaAsc),
+              buildOption('নাম অনুযায়ী (Z - A)', SortOption.alphaDesc),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (result != null) {
+      setState(() {
+        _currentSortOption = result;
+        _saveSortOption(result);
+      });
+    }
+  }
+
+  Future<void> _saveSelectedListId(int? listId) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (listId != null) {
+      await prefs.setInt('selected_list_id', listId);
+    } else {
+      await prefs.remove('selected_list_id');
+    }
+  }
+
   Future<void> _saveCategories() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(
-      'bazar_categories',
-      _categories.map((c) => c.name).toList(),
-    );
+    final key = 'bazar_categories_${_selectedListId ?? "default"}';
+    await prefs.setStringList(key, _categories.map((c) => c.name).toList());
+  }
+
+  Future<void> _loadCategoriesForCurrentList() async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'bazar_categories_${_selectedListId ?? "default"}';
+    final List<String>? savedCategories = prefs.getStringList(key);
+
+    setState(() {
+      _categories.clear();
+      if (savedCategories != null) {
+        for (var catName in savedCategories) {
+          _categories.add(Category(catName));
+        }
+      } else {
+        bool isDefaultList =
+            _selectedListId == null || _selectedList?.name == 'আমার লিস্ট';
+
+        if (isDefaultList) {
+          _categories.addAll(_defaultSeedCategories);
+        } else {
+          _categories.add(Category('অন্যান্য (Others)'));
+        }
+        _saveCategories();
+      }
+
+      // Reset currently selected filter if it's no longer in the categories list
+      if (_selectedFilterCategory != null &&
+          !_categories.any((c) => c.name == _selectedFilterCategory!.name)) {
+        _selectedFilterCategory = null;
+        _saveFilterCategory(null);
+      }
+    });
   }
 
   Future<void> _migrateFromPrefsIfNeeded() async {
@@ -146,21 +247,87 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _loadItems() async {
+  Future<void> _updateSelectedListFromLists() async {
+    if (_lists.isNotEmpty) {
+      if (_selectedListId != null) {
+        try {
+          _selectedList = _lists.firstWhere(
+            (list) => list.id == _selectedListId,
+          );
+        } catch (_) {
+          _selectedList = _lists.first;
+          _selectedListId = _selectedList!.id;
+          await _saveSelectedListId(_selectedListId);
+        }
+      } else {
+        _selectedList = _lists.first;
+        _selectedListId = _selectedList!.id;
+        await _saveSelectedListId(_selectedListId);
+      }
+    } else {
+      _selectedList = null;
+      _selectedListId = null;
+      await _saveSelectedListId(null);
+    }
+  }
+
+  Future<void> _loadLists() async {
+    final lists = await DatabaseHelper.instance.getAllLists();
+    setState(() {
+      _lists.clear();
+      _lists.addAll(lists);
+    });
+
+    await _updateSelectedListFromLists();
+    await _loadCategoriesForCurrentList();
+
+    if (_selectedList != null) {
+      await _loadItemsForSelectedList();
+    } else {
+      setState(() {
+        _items.clear();
+      });
+    }
+  }
+
+  Future<void> _loadItemsForSelectedList() async {
     await _migrateFromPrefsIfNeeded();
-    final dbItems = await DatabaseHelper.instance.getAllItems();
+    if (_selectedListId == null) {
+      setState(() {
+        _items.clear();
+      });
+      return;
+    }
+    final dbItems = await DatabaseHelper.instance.getAllItems(
+      listId: _selectedListId,
+    );
     setState(() {
       _items.clear();
       _items.addAll(dbItems.where((item) => !item.isArchived));
     });
   }
 
+  Future<void> _loadItems() async {
+    await _loadItemsForSelectedList();
+  }
+
   Future<void> _addItem(BazarItem item) async {
-    final id = await DatabaseHelper.instance.insertItem(item);
-    item.id = id;
-    setState(() {
-      _items.add(item);
-    });
+    if (_selectedListId == null) {
+      final newList = BazarList(name: 'আমার লিস্ট');
+      final newId = await DatabaseHelper.instance.insertList(newList);
+      _selectedListId = newId;
+      await _saveSelectedListId(newId);
+      await _loadLists();
+    }
+
+    if (_selectedListId != null) {
+      item.listId = _selectedListId;
+      final id = await DatabaseHelper.instance.insertItem(item);
+      item.id = id;
+      setState(() {
+        _items.add(item);
+      });
+    }
   }
 
   Future<void> _updateItem(BazarItem item) async {
@@ -190,13 +357,15 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Future<void> _confirmArchiveAll() async {
+  Future<void> _confirmArchiveList() async {
+    if (_selectedList == null) return;
+
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('সবগুলো আর্কাইভ করতে চান?'),
+        title: const Text('লিস্ট আর্কাইভ করতে চান?'),
         content: const Text(
-          'আপনার তালিকার সবগুলো আইটেম আর্কাইভে চলে যাবে। আপনি কি নিশ্চিত?',
+          'এই লিস্ট এবং এর সব আইটেম আর্কাইভে চলে যাবে। আপনি কি নিশ্চিত?',
         ),
         actions: [
           TextButton(
@@ -212,8 +381,327 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (result == true) {
-      await DatabaseHelper.instance.archiveAllItems();
-      _loadItems();
+      await DatabaseHelper.instance.archiveList(_selectedList!.id!);
+      _selectedListId = null;
+      await _saveSelectedListId(null);
+      await _loadLists();
+    }
+  }
+
+  Future<void> _createNewList() async {
+    _newListController.clear();
+    String? errorMessage;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('নতুন লিস্ট'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _newListController,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'লিস্টের নাম',
+                  errorText: errorMessage,
+                ),
+                onChanged: (_) {
+                  if (errorMessage != null) {
+                    setState(() => errorMessage = null);
+                  }
+                },
+                onSubmitted: (_) {
+                  if (_newListController.text.trim().isEmpty) {
+                    setState(
+                      () => errorMessage = 'লিস্টের নাম ফাঁকা রাখা যাবে না',
+                    );
+                  } else {
+                    Navigator.of(ctx).pop(true);
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              ActionChip(
+                avatar: const Icon(Icons.date_range, size: 16),
+                label: const Text('আজকের তারিখ'),
+                onPressed: () {
+                  final now = DateTime.now();
+                  final dateStr =
+                      '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
+                  final currentText = _newListController.text;
+                  _newListController.text = currentText.isEmpty
+                      ? dateStr
+                      : '$currentText $dateStr';
+                  _newListController.selection = TextSelection.fromPosition(
+                    TextPosition(offset: _newListController.text.length),
+                  );
+                  if (errorMessage != null) {
+                    setState(() => errorMessage = null);
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('বাতিল'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (_newListController.text.trim().isEmpty) {
+                  setState(
+                    () => errorMessage = 'লিস্টের নাম ফাঁকা রাখা যাবে না',
+                  );
+                } else {
+                  Navigator.of(ctx).pop(true);
+                }
+              },
+              child: const Text(
+                'তৈরি করুন',
+                style: TextStyle(color: Colors.blue),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final newListName = _newListController.text.trim();
+    if (result == true && newListName.isNotEmpty) {
+      final newList = BazarList(name: newListName);
+      final id = await DatabaseHelper.instance.insertList(newList);
+      _selectedListId = id;
+      await _saveSelectedListId(id);
+      await _loadLists();
+    }
+  }
+
+  Future<void> _unsubscribe() async {
+    final prefs = await SharedPreferences.getInstance();
+    final phone = prefs.getString('userPhone') ?? '';
+
+    if (phone.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Phone not found!'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    final confirmed = await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Unsubscribing'),
+        content: Text('Are you sure?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$_baseUrl/unsubscribe.php'),
+            body: {'user_mobile': phone},
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (!mounted) return;
+      Navigator.of(context).pop();
+
+      final data = jsonDecode(res.body);
+      final statusCode = data['statusCode']?.toString() ?? '';
+      final statusDetail = data['statusDetail']?.toString() ?? '';
+      final successFlag = data['success'] == true;
+      final subscriptionStatus =
+          data['subscriptionStatus']?.toString().toUpperCase() ?? '';
+      final success =
+          successFlag ||
+          statusCode == 'S1000' ||
+          subscriptionStatus == 'UNREGISTERED';
+
+      if (success) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Unsubscribing success!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // await _handleSignOutWithStatus();
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginPage()),
+          (route) => false,
+        );
+      } else {
+        final msg = statusDetail.isNotEmpty
+            ? statusDetail
+            : 'unsubscribing failed';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.redAccent),
+        );
+      }
+    } on TimeoutException catch (_) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Timeout error!'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Network error!'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
+  void _showListOptionsModal(BazarList list) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade400,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text(
+                list.name,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.archive, color: Colors.orange),
+              title: const Text('লিস্ট আর্কাইভ করুন'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _confirmArchiveSpecificList(list);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('লিস্ট মুছুন'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _confirmDeleteList(list);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmArchiveSpecificList(BazarList list) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('লিস্ট আর্কাইভ করতে চান?'),
+        content: Text(
+          '"${list.name}" এবং এর সব আইটেম আর্কাইভে চলে যাবে। আপনি কি নিশ্চিত?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('না'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('হ্যাঁ', style: TextStyle(color: Colors.orange)),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      await DatabaseHelper.instance.archiveList(list.id!);
+      if (_selectedListId == list.id) {
+        _selectedListId = null;
+        await _saveSelectedListId(null);
+      }
+      await _loadLists();
+    }
+  }
+
+  Future<void> _confirmDeleteList(BazarList list) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('লিস্ট মুছতে চান?'),
+        content: Text(
+          '"${list.name}" এবং এর ভিতরের সব আইটেম চিরতরে মুছে যাবে। আপনি কি নিশ্চিত?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('বাতিল'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('মুছুন', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      await DatabaseHelper.instance.deleteList(list.id!);
+      if (_selectedListId == list.id) {
+        _selectedListId = null;
+        await _saveSelectedListId(null);
+      }
+      await _loadLists();
     }
   }
 
@@ -226,75 +714,101 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final buffer = StringBuffer();
-    buffer.writeln('বাজার তালিকা (Bazar Talika):');
-    buffer.writeln('--------------------------');
+    final listName = _selectedList?.name ?? 'বাজার তালিকা (Bazar List)';
+    buffer.writeln('$listName:');
+    buffer.writeln('-------------------------------------------');
 
-    double totalPrice = 0.0;
+    double totalActivePrice = 0.0;
+    double totalBoughtPrice = 0.0;
 
-    // Group active vs bought (Optional, but simple list is fine)
-    // we'll just list all items currently visible or all items in DB.
-    // Let's share whatever is in _items right now.
+    Map<String, List<BazarItem>> categoryGroups = {};
     for (var item in _items) {
-      buffer.write('- ${item.name}');
-      if (item.price != null && item.price! > 0) {
-        buffer.write(' (৳${item.price})');
-        totalPrice += item.price!;
-      }
-      if (item.isBought) {
-        buffer.write(' [✓]');
-      }
-      buffer.writeln();
+      final cat = item.category?.name ?? 'অন্যান্য (Others)';
+      categoryGroups.putIfAbsent(cat, () => []).add(item);
     }
 
-    if (totalPrice > 0) {
-      buffer.writeln('--------------------------');
-      buffer.writeln('মোট সম্ভাব্য খরচ: ৳$totalPrice');
+    final sortedCategories = categoryGroups.keys.toList()..sort();
+
+    for (var cat in sortedCategories) {
+      buffer.writeln('\n[$cat]');
+      for (var item in categoryGroups[cat]!) {
+        buffer.write('- ${item.name}');
+        if (item.price != null && item.price! > 0) {
+          buffer.write(' (৳${item.price})');
+          if (item.isBought) {
+            totalBoughtPrice += item.price!;
+          } else {
+            totalActivePrice += item.price!;
+          }
+        }
+        if (item.isBought) {
+          buffer.write(' [✓]');
+        }
+        buffer.writeln();
+      }
+    }
+
+    if (totalActivePrice > 0 || totalBoughtPrice > 0) {
+      buffer.writeln('\n-------------------------------------------');
+      if (totalActivePrice > 0) {
+        buffer.writeln('বাকি আছে (Remaining): ৳$totalActivePrice');
+      }
+      if (totalBoughtPrice > 0) {
+        buffer.writeln('কেনা সম্পন্ন (Done): ৳$totalBoughtPrice');
+      }
+      final grandTotal = totalActivePrice + totalBoughtPrice;
+      if (totalActivePrice > 0 && totalBoughtPrice > 0) {
+        buffer.writeln('সর্বমোট (Total): ৳$grandTotal');
+      }
     }
 
     await SharePlus.instance.share(ShareParams(text: buffer.toString()));
   }
 
-  Future<void> _loadAd() async {
-    _isAdLoading = true;
-    final screenWidth = MediaQuery.of(context).size.width.truncate();
+  // Future<void> _loadAd() async {
+  //   _isAdLoading = true;
+  //   final screenWidth = MediaQuery.of(context).size.width.truncate();
 
-    final size = await AdSize.getLargeAnchoredAdaptiveBannerAdSize(
-      screenWidth > 0 ? screenWidth : 320,
-    );
+  //   final size = await AdSize.getLargeAnchoredAdaptiveBannerAdSize(
+  //     screenWidth > 0 ? screenWidth : 320,
+  //   );
 
-    if (size == null) {
-      debugPrint('Unable to get adaptive banner size.');
-      _isAdLoading = false;
-      return;
-    }
+  //   if (size == null) {
+  //     debugPrint('Unable to get adaptive banner size.');
+  //     _isAdLoading = false;
+  //     return;
+  //   }
 
-    _bannerAd = BannerAd(
-      adUnitId: _adUnitId,
-      request: const AdRequest(),
-      size: size,
-      listener: BannerAdListener(
-        onAdLoaded: (ad) {
-          debugPrint('$ad loaded.');
-          setState(() {
-            _isAdLoaded = true;
-            _isAdLoading = false;
-          });
-        },
-        onAdFailedToLoad: (ad, err) {
-          debugPrint('BannerAd failed to load: $err');
-          _isAdLoading = false;
-          ad.dispose();
-        },
-      ),
-    )..load();
-  }
+  //   // _bannerAd = BannerAd(
+  //   //   adUnitId: _adUnitId,
+  //   //   request: const AdRequest(),
+  //   //   size: size,
+  //   //   listener: BannerAdListener(
+  //   //     onAdLoaded: (ad) {
+  //   //       debugPrint('$ad loaded.');
+  //   //       setState(() {
+  //   //         _isAdLoaded = true;
+  //   //         _isAdLoading = false;
+  //   //       });
+  //   //     },
+  //   //     onAdFailedToLoad: (ad, err) {
+  //   //       debugPrint('BannerAd failed to load: $err');
+  //   //       _isAdLoading = false;
+  //   //       ad.dispose();
+  //   //     },
+  //   //   ),
+  //   // )..load();
+  // }
 
   @override
   void dispose() {
     _quickAddNameController.dispose();
     _quickAddPriceController.dispose();
+    _newListController.dispose();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     _quickAddFocusNode.dispose();
-    _bannerAd?.dispose();
+    // _bannerAd?.dispose();
     super.dispose();
   }
 
@@ -439,13 +953,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 final priceText = priceController.text.trim();
                 final updatedItem = BazarItem(
                   id: item.id,
+                  listId: item.listId,
                   name: nameText,
                   price: priceText.isNotEmpty
                       ? double.tryParse(priceText)
                       : null,
                   category: selectedCategory,
                   isBought: item.isBought,
+                  isArchived: item.isArchived,
                   createdAt: item.createdAt,
+                  originalCreatedAt: item.originalCreatedAt,
                 );
 
                 // Update the item in the list
@@ -468,25 +985,45 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showDeleteCategoryDialog(Category cat, {VoidCallback? onDeleted}) {
+  void _showEditOrDeleteCategoryDialog(
+    Category cat, {
+    VoidCallback? onDeleted,
+  }) {
     if (cat.name == 'অন্যান্য (Others)') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('এই ক্যাটাগরিটি ডিফল্ট, তাই এটি মুছে ফেলা যাবে না।'),
+          content: Text(
+            'এই ক্যাটাগরিটি ডিফল্ট, তাই এটি এডিট বা মুছে ফেলা যাবে না।',
+          ),
         ),
       );
       return;
     }
 
+    final editController = TextEditingController(text: cat.name);
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ক্যাটাগরি মুছুন'),
-        content: Text('আপনি কি "${cat.name}" ক্যাটাগরি মুছে ফেলতে চান?'),
+        title: const Text('ক্যাটাগরি সম্পাদনা'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: editController,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'ক্যাটাগরির নাম',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('না'),
+            child: const Text('বাতিল'),
           ),
           TextButton(
             onPressed: () {
@@ -496,6 +1033,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (_selectedFilterCategory == cat) {
                   _selectedFilterCategory = null;
                   _saveFilterCategory(null);
+                }
+                if (_quickAddCategory == cat) {
+                  _quickAddCategory = null;
                 }
                 for (var item in _items) {
                   if (item.category == cat) {
@@ -509,7 +1049,41 @@ class _HomeScreenState extends State<HomeScreen> {
               }
               Navigator.of(ctx).pop();
             },
-            child: const Text('হ্যাঁ', style: TextStyle(color: Colors.red)),
+            child: const Text('ডিলিট', style: TextStyle(color: Colors.red)),
+          ),
+          TextButton(
+            onPressed: () {
+              final newName = editController.text.trim();
+              if (newName.isNotEmpty && newName != cat.name) {
+                final newCat = Category(newName);
+                setState(() {
+                  final index = _categories.indexOf(cat);
+                  if (index != -1) {
+                    _categories[index] = newCat;
+                  }
+                  _saveCategories();
+
+                  if (_selectedFilterCategory == cat) {
+                    _selectedFilterCategory = newCat;
+                    _saveFilterCategory(newCat);
+                  }
+                  if (_quickAddCategory == cat) {
+                    _quickAddCategory = newCat;
+                  }
+                  for (var item in _items) {
+                    if (item.category == cat) {
+                      item.category = newCat;
+                      _updateItem(item);
+                    }
+                  }
+                });
+              }
+              Navigator.of(ctx).pop();
+            },
+            child: const Text(
+              'আপডেট করুন',
+              style: TextStyle(color: Colors.blue),
+            ),
           ),
         ],
       ),
@@ -523,6 +1097,14 @@ class _HomeScreenState extends State<HomeScreen> {
           item.category != _selectedFilterCategory) {
         return false;
       }
+
+      if (_isSearching && _searchController.text.isNotEmpty) {
+        final searchQuery = _searchController.text.toLowerCase();
+        if (!item.name.toLowerCase().contains(searchQuery)) {
+          return false;
+        }
+      }
+
       return true;
     }).toList();
 
@@ -562,65 +1144,142 @@ class _HomeScreenState extends State<HomeScreen> {
       (sum, item) => sum + (item.price ?? 0.0),
     );
 
-    final appVersion = 'v1.1.4'; // You can update this as needed
+    final appVersion = 'v1.2.2'; // You can update this as needed
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'তালিকা',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: _isSearching
+            ? SizedBox(
+                height: 40,
+                child: TextField(
+                  controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: 'আইটেম খুঁজুন...',
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16.0,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25.0),
+                    ),
+                  ),
+                  onChanged: (value) {
+                    setState(() {}); // Trigger rebuild to filter items
+                  },
+                ),
+              )
+            : PopupMenuButton<BazarList>(
+                tooltip: 'লিস্ট পরিবর্তন করুন',
+                initialValue: _selectedList,
+                onSelected: (BazarList list) async {
+                  _selectedListId = list.id;
+                  await _saveSelectedListId(list.id);
+                  await _loadLists();
+                },
+                itemBuilder: (BuildContext context) {
+                  return _lists.map((BazarList list) {
+                    return PopupMenuItem<BazarList>(
+                      value: list,
+                      child: Text(
+                        list.name,
+                        style: TextStyle(
+                          fontWeight: list.id == _selectedListId
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    );
+                  }).toList();
+                },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _selectedList?.name ?? 'লিস্ট নেই',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Icon(Icons.arrow_drop_down),
+                  ],
+                ),
+              ),
         centerTitle: false,
         actions: [
-          IconButton(
-            icon: Icon(widget.isDarkMode ? Icons.dark_mode : Icons.light_mode),
-            tooltip: 'ডার্ক মোড টগল',
-            onPressed: () {
-              widget.onDarkModeToggle(!widget.isDarkMode);
-            },
-          ),
-          if (_items.isNotEmpty)
+          if (_selectedList != null)
             IconButton(
-              icon: const Icon(Icons.share, color: Colors.green),
-              tooltip: 'শেয়ার করুন',
-              onPressed: _shareList,
+              icon: Icon(_isSearching ? Icons.close : Icons.search),
+              tooltip: _isSearching ? 'সার্চ বন্ধ করুন' : 'সার্চ করুন',
+              onPressed: () {
+                setState(() {
+                  _isSearching = !_isSearching;
+                  if (!_isSearching) {
+                    _searchController.clear();
+                  } else {
+                    _searchFocusNode.requestFocus();
+                  }
+                });
+              },
             ),
-          if (_items.isNotEmpty)
+          if (_selectedList != null)
             IconButton(
               icon: const Icon(Icons.archive, color: Colors.blue),
-              tooltip: 'সব আর্কাইভ করুন',
-              onPressed: _confirmArchiveAll,
+              tooltip: 'লিস্ট আর্কাইভ করুন',
+              onPressed: _confirmArchiveList,
             ),
-          PopupMenuButton<SortOption>(
-            tooltip: 'সজানো (Sort)',
-            icon: const Icon(Icons.sort),
-            initialValue: _currentSortOption,
-            onSelected: (SortOption result) {
-              setState(() {
-                _currentSortOption = result;
-                _saveSortOption(result);
-              });
+          // Sort moved into overflow menu (see _showSortDialog)
+
+          // Overflow menu with Dark Mode toggle and Share
+          PopupMenuButton<int>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (int v) {
+              if (v == 0) {
+                widget.onDarkModeToggle(!widget.isDarkMode);
+              } else if (v == 1) {
+                _shareList();
+              } else if (v == 2) {
+                _showSortDialog();
+              }
             },
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<SortOption>>[
-              const PopupMenuItem<SortOption>(
-                value: SortOption.manual,
-                child: Text('নিজের মতো (Manual)'),
+            itemBuilder: (context) => <PopupMenuEntry<int>>[
+              PopupMenuItem<int>(
+                value: 0,
+                child: Row(
+                  children: [
+                    Icon(
+                      widget.isDarkMode ? Icons.dark_mode : Icons.light_mode,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      widget.isDarkMode
+                          ? 'ডার্ক মোড (চালু)'
+                          : 'ডার্ক মোড (বন্ধ)',
+                    ),
+                  ],
+                ),
               ),
-              const PopupMenuItem<SortOption>(
-                value: SortOption.dateAsc,
-                child: Text('আগে যোগ করা (Date Asc)'),
+              PopupMenuItem<int>(
+                value: 1,
+                enabled: _items.isNotEmpty,
+                child: Row(
+                  children: const [
+                    Icon(Icons.share, color: Colors.green),
+                    SizedBox(width: 12),
+                    Text('শেয়ার করুন'),
+                  ],
+                ),
               ),
-              const PopupMenuItem<SortOption>(
-                value: SortOption.dateDesc,
-                child: Text('নতুন যোগ করা (Date Desc)'),
-              ),
-              const PopupMenuItem<SortOption>(
-                value: SortOption.alphaAsc,
-                child: Text('নাম অনুযায়ী (A - Z)'),
-              ),
-              const PopupMenuItem<SortOption>(
-                value: SortOption.alphaDesc,
-                child: Text('নাম অনুযায়ী (Z - A)'),
+              PopupMenuItem<int>(
+                value: 2,
+                child: Row(
+                  children: const [
+                    Icon(Icons.sort),
+                    SizedBox(width: 12),
+                    Text('সজানো (Sort)'),
+                  ],
+                ),
               ),
             ],
           ),
@@ -634,7 +1293,10 @@ class _HomeScreenState extends State<HomeScreen> {
               height: 60,
               child: ListView(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 children: [
                   // Add New Category Button
                   ActionChip(
@@ -646,6 +1308,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           final newCategory = Category(newCategoryName);
                           _categories.add(newCategory);
                           _selectedFilterCategory = newCategory;
+                          _quickAddCategory = null;
                         });
                         _saveCategories();
                       });
@@ -659,6 +1322,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (selected) {
                         setState(() {
                           _selectedFilterCategory = null;
+                          _quickAddCategory = null;
                           _saveFilterCategory(null);
                         });
                       }
@@ -669,13 +1333,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     (cat) => Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: GestureDetector(
-                        onLongPress: () => _showDeleteCategoryDialog(cat),
+                        onLongPress: () => _showEditOrDeleteCategoryDialog(cat),
                         child: ChoiceChip(
                           label: Text(cat.name),
                           selected: _selectedFilterCategory == cat,
                           onSelected: (selected) {
                             setState(() {
                               _selectedFilterCategory = selected ? cat : null;
+                              _quickAddCategory = null;
                               _saveFilterCategory(_selectedFilterCategory);
                             });
                           },
@@ -704,7 +1369,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     )
                   : ReorderableListView(
-                      onReorder: (oldIndex, newIndex) {
+                      onReorderItem: (oldIndex, newIndex) {
                         setState(() {
                           if (newIndex > oldIndex) {
                             newIndex -= 1;
@@ -751,12 +1416,16 @@ class _HomeScreenState extends State<HomeScreen> {
                             newOrder[i].createdAt = now.add(
                               Duration(milliseconds: i),
                             );
-                            _updateItem(newOrder[i]);
+                            // Directly update DB without calling _updateItem to avoid rapid multiple setState() calls
+                            DatabaseHelper.instance.updateItem(newOrder[i]);
                           }
 
-                          // Update state
-                          _items.clear();
-                          _items.addAll(newOrder);
+                          // Update state by sorting _items based on the new createdAt
+                          // to keep items that might be hidden by search/category filters
+                          _items.sort(
+                            (a, b) => a.createdAt.compareTo(b.createdAt),
+                          );
+
                           _currentSortOption = SortOption.manual;
                         });
                       },
@@ -776,7 +1445,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.red,
+                                    color: Color.fromARGB(255, 244, 105, 54),
                                   ),
                                 ),
                                 Text(
@@ -784,7 +1453,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.red,
+                                    color: Color.fromARGB(255, 244, 105, 54),
                                   ),
                                 ),
                               ],
@@ -951,7 +1620,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   Expanded(
                     flex: 3,
                     child: DropdownButtonFormField<Category>(
-                      initialValue: _quickAddCategory,
+                      initialValue:
+                          _quickAddCategory ?? _selectedFilterCategory,
                       isExpanded: true,
                       alignment: Alignment.center,
                       style: TextStyle(
@@ -1051,22 +1721,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-            if (_isAdLoaded && _bannerAd != null)
-              SizedBox(
-                width: MediaQuery.of(context).size.width,
-                height: _bannerAd!.size.height.toDouble(),
-                child: AdWidget(ad: _bannerAd!),
-              )
-            else
-              const SizedBox(height: 16),
+            // if (_isAdLoaded && _bannerAd != null)
+            //   SizedBox(
+            //     width: MediaQuery.of(context).size.width,
+            //     height: _bannerAd!.size.height.toDouble(),
+            //     child: AdWidget(ad: _bannerAd!),
+            //   )
+            // else
+            const SizedBox(height: 16),
           ],
         ),
       ),
+      onDrawerChanged: (isOpened) {
+        if (isOpened) {
+          FocusScope.of(context).unfocus();
+        }
+      },
       drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             DrawerHeader(
+              margin: EdgeInsets.zero,
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: Theme.of(context).brightness == Brightness.dark
@@ -1076,7 +1752,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Image.asset('assets/logo.png', height: 90, width: 90),
+                  Image.asset('assets/app_icon.png', height: 90, width: 90),
                   const SizedBox(height: 8),
                   Text(
                     'বাজার তালিকা',
@@ -1091,48 +1767,173 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('হোম'),
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.archive),
-              title: const Text('আর্কাইভস (Archives)'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        ArchiveScreen(isDarkMode: widget.isDarkMode),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _createNewList();
+                },
+                icon: const Icon(Icons.add_circle_outline),
+                label: const Text(
+                  'লিস্ট তৈরি করুন',
+                  style: TextStyle(fontSize: 16),
+                ),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 16,
                   ),
-                ).then((_) => _loadItems());
-              },
+                  alignment: Alignment.center,
+                  elevation: 1,
+                  backgroundColor:
+                      Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey[800]
+                      : Colors.white,
+                  // foregroundColor: Theme.of(context).primaryColor,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(25),
+                  ),
+                ),
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.info),
-              title: const Text('অ্যাপ্লিকেশন সম্পর্কে'),
-              onTap: () {
-                Navigator.pop(context);
-                showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('অ্যাপ্লিকেশন সম্পর্কে'),
-                    content: Text(
-                      'বাজার তালিকা অ্যাপ্লিকেশন $appVersion\nএই অ্যাপটি আপনার বাজারের তালিকা পরিচালনা করতে সাহায্য করে।',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('ঠিক আছে'),
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  const SizedBox(height: 4),
+                  ..._lists.map((list) {
+                    final isSelected = list.id == _selectedListId;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 1,
                       ),
-                    ],
+                      child: ListTile(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        tileColor: isSelected
+                            ? Theme.of(
+                                context,
+                              ).primaryColor.withValues(alpha: 0.1)
+                            : null,
+                        selectedTileColor: Theme.of(
+                          context,
+                        ).primaryColor.withValues(alpha: 0.1),
+                        leading: Icon(
+                          isSelected ? Icons.shopping_cart : Icons.list_alt,
+                          color: isSelected
+                              ? Theme.of(context).primaryColor
+                              : null,
+                        ),
+                        title: Text(
+                          list.name,
+                          style: TextStyle(
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                            color: isSelected
+                                ? Theme.of(context).primaryColor
+                                : null,
+                          ),
+                        ),
+                        selected: isSelected,
+                        onLongPress: () {
+                          Navigator.pop(context);
+                          _showListOptionsModal(list);
+                        },
+                        onTap: () async {
+                          Navigator.pop(context);
+                          if (!isSelected) {
+                            _selectedListId = list.id;
+                            await _saveSelectedListId(list.id);
+                            await _loadLists();
+                          }
+                        },
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+            SafeArea(
+              top: false,
+              child: Column(
+                children: [
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.archive),
+                    title: const Text('আর্কাইভস (Archives)'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              ArchiveScreen(isDarkMode: widget.isDarkMode),
+                        ),
+                      ).then((_) {
+                        if (!mounted) return;
+                        _loadItems();
+                        // Use context-free API to unfocus to avoid async context use
+                        FocusManager.instance.primaryFocus?.unfocus();
+                      });
+                    },
                   ),
-                );
-              },
+                  ListTile(
+                    leading: const Icon(Icons.info),
+                    title: const Text('অ্যাপ্লিকেশন সম্পর্কে'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('অ্যাপ্লিকেশন সম্পর্কে'),
+                          content: Text(
+                            'বাজার তালিকা অ্যাপ্লিকেশন $appVersion\nএই অ্যাপটি আপনার বাজারের তালিকা পরিচালনা করতে সাহায্য করে।',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('ঠিক আছে'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.info),
+                    title: const Text('Unsubscribe', style: TextStyle(color: Colors.red),),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _unsubscribe();
+                      // showDialog(
+                      //   context: context,
+                      //   builder: (ctx) => AlertDialog(
+                      //     title: Text('Unsubscribing'),
+                      //     content: Text('Are you sure?'),
+                      //     actions: [
+                      //       TextButton(
+                      //         onPressed: () => Navigator.pop(context, false),
+                      //         child: Text('Cancel'),
+                      //       ),
+                      //       ElevatedButton(
+                      //         style: ElevatedButton.styleFrom(
+                      //           backgroundColor: Colors.red,
+                      //           foregroundColor: Colors.white,
+                      //         ),
+                      //         onPressed: () => Navigator.pop(context, true),
+                      //         child: Text('Confirm'),
+                      //       ),
+                      //     ],
+                      //   ),
+                      // );
+                    },
+                  ),
+                ],
+              ),
             ),
           ],
         ),
