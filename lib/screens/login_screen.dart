@@ -6,10 +6,57 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-const String _baseUrl = "https://bdapps.flicksize.com/krishix/api/";
+const String _baseUrl = "https://bdapps.flicksize.com/smartlisting/api/";
 
 bool _isSupportedRobiAirtelNumber(String phone) {
   return RegExp(r'^01(?:6|8)\d{8}$').hasMatch(phone);
+}
+
+/// Calls `check_subscription.php` and returns true when the server reports an
+/// active or activating subscription:
+///   - `REGISTERED`              → billing confirmed
+///   - `INITIAL CHARGING PENDING` → subscription exists, billing still ticking
+/// Any other state (`UNREGISTERED`, missing field, error, etc.) returns false.
+Future<bool> _isUserSubscribedOrPending(String phone) async {
+  try {
+    final response = await http
+        .post(
+          Uri.parse('${_baseUrl}check_subscription.php'),
+          body: {'user_mobile': phone},
+        )
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode != 200) {
+      return false;
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      return false;
+    }
+
+    final status =
+        decoded['subscriptionStatus']?.toString().trim().toUpperCase() ?? '';
+    return status == 'REGISTERED' || status == 'INITIAL CHARGING PENDING';
+  } catch (e) {
+    return false;
+  }
+}
+
+/// Polls `check_subscription.php` until REGISTERED or INITIAL CHARGING PENDING
+/// is reported, or `maxAttempts` is reached. Returns true on either state.
+Future<bool> _waitForSubscriptionSyncShared(
+  String phone, {
+  int maxAttempts = 5,
+  Duration delay = const Duration(seconds: 1),
+}) async {
+  for (var i = 0; i < maxAttempts; i++) {
+    await Future.delayed(delay);
+    if (await _isUserSubscribedOrPending(phone)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 class LoginPage extends StatefulWidget {
@@ -24,32 +71,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
 
   Future<bool> _checkAlreadySubscribed(String phone) async {
-    try {
-      final response = await http
-          .post(
-            Uri.parse('${_baseUrl}check_subscription.php'),
-            body: {'user_mobile': phone},
-          )
-          .timeout(const Duration(seconds: 10));
-
-      if (response.statusCode != 200) {
-        return false;
-      }
-
-      final decoded = jsonDecode(response.body);
-
-      if (decoded is! Map<String, dynamic>) {
-        return false;
-      }
-
-      final status =
-          decoded['subscriptionStatus']?.toString().trim().toUpperCase() ?? '';
-      final isSubscribed = status == 'REGISTERED';
-
-      return isSubscribed;
-    } catch (e) {
-      return false;
-    }
+    return _isUserSubscribedOrPending(phone);
   }
 
   Future<void> _onContinue() async {
@@ -116,8 +138,22 @@ class _LoginPageState extends State<LoginPage> {
         );
       } else if (statusCode == 'E1351' ||
           message.toLowerCase().contains('already registered')) {
-        // User is already registered but check_subscription returned false
-        // This can happen due to BDApps server inconsistency
+        // Server says user is already in the system. Re-check
+        // check_subscription.php with polling — the previous call may have
+        // raced with billing. Only REGISTERED can grant home access.
+        final subscribed = await _waitForSubscriptionSyncShared(phone);
+
+        if (!mounted) return;
+
+        if (!subscribed) {
+          // Still not REGISTERED (e.g. INITIAL CHARGING PENDING).
+          // Refuse to log in.
+          _showError(
+            'সাবস্ক্রিপশন এখনো সক্রিয় হয়নি। কিছুক্ষণ পর আবার চেষ্টা করুন।',
+          );
+          return;
+        }
+
         _showSuccess('ইতিমধ্যে রেজিস্টার করা! লগইন হচ্ছে...');
         await Future.delayed(const Duration(milliseconds: 800));
 
@@ -348,21 +384,32 @@ class _OtpVerifyPageState extends State<OtpVerifyPage> {
           _readString(data, ['status', 'result']).toLowerCase() == 'success';
 
       if (statusCode == 'S1000' || successFlag) {
-        // OTP verified successfully - save credentials immediately
+        // OTP verified. Poll subscription status. REGISTERED or
+        // INITIAL CHARGING PENDING both grant app access; everything else
+        // (still pending incorrectly, error) blocks it.
+        final subscribed = await _waitForSubscriptionSyncShared(widget.phone);
+
+        if (!mounted) return;
+
+        if (!subscribed) {
+          // Neither REGISTERED nor INITIAL CHARGING PENDING after polling.
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('isLoggedIn', false);
+          await prefs.remove('userPhone');
+
+          if (!mounted) return;
+          _showError(
+            'সাবস্ক্রিপশন এখনো সক্রিয় হয়নি। কিছুক্ষণ পর আবার চেষ্টা করুন।',
+          );
+          return;
+        }
+
+        // REGISTERED or PENDING confirmed — persist login state and go home.
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('isLoggedIn', true);
         await prefs.setString('userPhone', widget.phone);
 
-        // Wait briefly for subscription sync, then continue to home.
-        final subscribed = await _waitForSubscriptionSync();
-
         if (!mounted) return;
-        if (!subscribed) {
-          _showWarning('সাবস্ক্রিপশন চলছে। অ্যাপ লোড হচ্ছে...');
-          await Future.delayed(const Duration(seconds: 1));
-          if (!mounted) return;
-        }
-
         Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
       } else {
         final message = _readString(data, [
@@ -380,55 +427,11 @@ class _OtpVerifyPageState extends State<OtpVerifyPage> {
     }
   }
 
-  // Wait for subscription to sync - reduced to 5 checks for faster UX.
-  Future<bool> _waitForSubscriptionSync() async {
-    for (var i = 0; i < 5; i++) {
-      await Future.delayed(const Duration(seconds: 1));
-
-      try {
-        final response = await http
-            .post(
-              Uri.parse('${_baseUrl}check_subscription.php'),
-              body: {'user_mobile': widget.phone},
-            )
-            .timeout(const Duration(seconds: 5));
-
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          if (data is Map<String, dynamic>) {
-            final status =
-                data['subscriptionStatus']?.toString().trim().toUpperCase() ??
-                '';
-            // Only accept REGISTERED (means charging succeeded)
-            if (status == 'REGISTERED') {
-              return true;
-            }
-          }
-        }
-      } catch (e) {
-        // Continue checking
-      }
-    }
-
-    return false;
-  }
-
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
         backgroundColor: Colors.redAccent,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 4),
-      ),
-    );
-  }
-
-  void _showWarning(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: Colors.orange,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 4),
       ),

@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:smartlist/screens/login_screen.dart';
 
 import '../models/bazar_item.dart';
 import '../models/bazar_list.dart';
@@ -15,7 +14,7 @@ import '../services/database_helper.dart';
 import '../widgets/bazar_item_tile.dart';
 import 'archive_screen.dart';
 
-const String _baseUrl = "https://bdapps.flicksize.com/krishix/api/";
+const String _baseUrl = "https://bdapps.flicksize.com/smartlisting/api/";
 
 enum SortOption { manual, dateAsc, dateDesc, alphaAsc, alphaDesc }
 
@@ -487,7 +486,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (phone.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('Phone not found!'),
           backgroundColor: Colors.redAccent,
         ),
@@ -496,23 +495,23 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (!mounted) return;
-    final confirmed = await showDialog(
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Unsubscribing'),
-        content: Text('Are you sure?'),
+        title: const Text('Unsubscribing'),
+        content: const Text('Are you sure?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel'),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            onPressed: () => Navigator.pop(context, true),
-            child: Text('Confirm'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirm'),
           ),
         ],
       ),
@@ -521,11 +520,27 @@ class _HomeScreenState extends State<HomeScreen> {
     if (confirmed != true) return;
     if (!mounted) return;
 
-    showDialog(
-      context: context,
+    // Hold a reference to the loader dialog so we can reliably close it.
+    bool loaderOpen = true;
+    final loaderContext = context;
+    showDialog<void>(
+      context: loaderContext,
       barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
+      builder: (dialogContext) => PopScope(
+        canPop: false,
+        child: const Center(child: CircularProgressIndicator()),
+      ),
     );
+
+    Future<void> closeLoader() async {
+      if (!loaderOpen) return;
+      loaderOpen = false;
+      if (!mounted) return;
+      // Guard against pop when no dialog actually exists on the navigator.
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    }
 
     try {
       final res = await http
@@ -536,55 +551,79 @@ class _HomeScreenState extends State<HomeScreen> {
           .timeout(const Duration(seconds: 15));
 
       if (!mounted) return;
-      Navigator.of(context).pop();
+      await closeLoader();
 
-      final data = jsonDecode(res.body);
+      if (res.statusCode != 200) {
+        throw Exception('HTTP ${res.statusCode}');
+      }
+
+      final dynamic decoded = jsonDecode(res.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Unexpected response shape');
+      }
+      final data = decoded;
       final statusCode = data['statusCode']?.toString() ?? '';
       final statusDetail = data['statusDetail']?.toString() ?? '';
       final successFlag = data['success'] == true;
       final subscriptionStatus =
-          data['subscriptionStatus']?.toString().toUpperCase() ?? '';
+          (data['subscriptionStatus']?.toString() ?? '').toUpperCase();
+
       final success =
           successFlag ||
           statusCode == 'S1000' ||
           subscriptionStatus == 'UNREGISTERED';
 
       if (success) {
+        // Clear auth state before navigating so the cold-start guard in
+        // main.dart doesn't read a stale `isLoggedIn` flag.
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('isLoggedIn', false);
+        await prefs.remove('userPhone');
+
         if (!mounted) return;
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('Unsubscribing success!'),
             backgroundColor: Colors.green,
           ),
         );
-        // await _handleSignOutWithStatus();
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const LoginPage()),
+
+        // Use the named route already registered in main.dart — this avoids
+        // building a new LoginPage widget ad-hoc and bypasses history quirks
+        // that triggered `_history.isNotEmpty` assertion failures.
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/login',
           (route) => false,
         );
       } else {
-        final msg = statusDetail.isNotEmpty
-            ? statusDetail
-            : 'unsubscribing failed';
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: Colors.redAccent),
+          SnackBar(
+            content: Text(statusDetail.isNotEmpty
+                ? statusDetail
+                : 'Unsubscribing failed'),
+            backgroundColor: Colors.redAccent,
+          ),
         );
       }
-    } on TimeoutException catch (_) {
+    } on TimeoutException {
       if (!mounted) return;
-      Navigator.of(context).pop();
+      await closeLoader();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('Timeout error!'),
           backgroundColor: Colors.redAccent,
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      Navigator.of(context).pop();
+      await closeLoader();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Network error!'),
+          content: Text('Network error: $e'),
           backgroundColor: Colors.redAccent,
         ),
       );
