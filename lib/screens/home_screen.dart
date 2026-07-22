@@ -520,11 +520,17 @@ class _HomeScreenState extends State<HomeScreen> {
     if (confirmed != true) return;
     if (!mounted) return;
 
+    // Capture NavigatorState and ScaffoldMessenger BEFORE any async gap so
+    // the closures below don't reach back into `this.context` after the
+    // widget has been disposed. This also silences the lint warning about
+    // using a BuildContext across async gaps with an unrelated mounted check.
+    final navigator = Navigator.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     // Hold a reference to the loader dialog so we can reliably close it.
     bool loaderOpen = true;
-    final loaderContext = context;
     showDialog<void>(
-      context: loaderContext,
+      context: context,
       barrierDismissible: false,
       builder: (dialogContext) => PopScope(
         canPop: false,
@@ -536,9 +542,10 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!loaderOpen) return;
       loaderOpen = false;
       if (!mounted) return;
-      // Guard against pop when no dialog actually exists on the navigator.
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
+      // Use the captured NavigatorState — no BuildContext lookup after
+      // async gaps, no analyzer warning.
+      if (navigator.canPop()) {
+        navigator.pop();
       }
     }
 
@@ -582,7 +589,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
         if (!mounted) return;
 
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           const SnackBar(
             content: Text('Unsubscribing success!'),
             backgroundColor: Colors.green,
@@ -592,13 +599,13 @@ class _HomeScreenState extends State<HomeScreen> {
         // Use the named route already registered in main.dart — this avoids
         // building a new LoginPage widget ad-hoc and bypasses history quirks
         // that triggered `_history.isNotEmpty` assertion failures.
-        Navigator.of(context).pushNamedAndRemoveUntil(
+        navigator.pushNamedAndRemoveUntil(
           '/login',
           (route) => false,
         );
       } else {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           SnackBar(
             content: Text(statusDetail.isNotEmpty
                 ? statusDetail
@@ -611,7 +618,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       await closeLoader();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      scaffoldMessenger.showSnackBar(
         const SnackBar(
           content: Text('Timeout error!'),
           backgroundColor: Colors.redAccent,
@@ -621,7 +628,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       await closeLoader();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Text('Network error: $e'),
           backgroundColor: Colors.redAccent,
