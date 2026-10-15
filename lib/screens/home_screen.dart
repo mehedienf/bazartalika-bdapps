@@ -1,5 +1,6 @@
-import 'dart:convert';
 import 'dart:async';
+import 'dart:convert';
+
 // import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -572,8 +573,8 @@ class _HomeScreenState extends State<HomeScreen> {
       final statusCode = data['statusCode']?.toString() ?? '';
       final statusDetail = data['statusDetail']?.toString() ?? '';
       final successFlag = data['success'] == true;
-      final subscriptionStatus =
-          (data['subscriptionStatus']?.toString() ?? '').toUpperCase();
+      final subscriptionStatus = (data['subscriptionStatus']?.toString() ?? '')
+          .toUpperCase();
 
       final success =
           successFlag ||
@@ -599,17 +600,14 @@ class _HomeScreenState extends State<HomeScreen> {
         // Use the named route already registered in main.dart — this avoids
         // building a new LoginPage widget ad-hoc and bypasses history quirks
         // that triggered `_history.isNotEmpty` assertion failures.
-        navigator.pushNamedAndRemoveUntil(
-          '/login',
-          (route) => false,
-        );
+        navigator.pushNamedAndRemoveUntil('/login', (route) => false);
       } else {
         if (!mounted) return;
         scaffoldMessenger.showSnackBar(
           SnackBar(
-            content: Text(statusDetail.isNotEmpty
-                ? statusDetail
-                : 'Unsubscribing failed'),
+            content: Text(
+              statusDetail.isNotEmpty ? statusDetail : 'Unsubscribing failed',
+            ),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -1951,7 +1949,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   ListTile(
                     leading: const Icon(Icons.info),
-                    title: const Text('Unsubscribe', style: TextStyle(color: Colors.red),),
+                    title: const Text(
+                      'Unsubscribe',
+                      style: TextStyle(color: Colors.red),
+                    ),
                     onTap: () {
                       Navigator.pop(context);
                       _unsubscribe();
